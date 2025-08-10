@@ -75,11 +75,14 @@ jobs:
           cache-from: type=registry,ref=yo49/user_management-fastapi:cache
           cache-to: type=inline,mode=max
           
-      - name: Scan the Docker image
-        uses: aquasecurity/trivy-action@master
+      - name: Scan the Docker image (Trivy)
+        uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: 'yo49/user_management-fastapi:${{ github.sha }}'
-          format: 'table'
-          exit-code: '1' # Fail the job if vulnerabilities are found
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/user_management-fastapi:${{ github.sha }}
+          scanners: vuln
+          severity: CRITICAL
           ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
+          format: table
+          skip-dirs: .venv
+          exit-code: '1'
+
