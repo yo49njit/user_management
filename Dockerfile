@@ -1,5 +1,5 @@
 # Define a base stage with a Debian Bookworm base image that includes the latest glibc update
-FROM python:3.12-bookworm as base
+FROM python:3.12-bookworm AS base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -20,7 +20,6 @@ RUN apt-get update \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-
 # Install Python dependencies in /.venv
 COPY requirements.txt .
 RUN python -m venv /.venv \
@@ -29,12 +28,13 @@ RUN python -m venv /.venv \
     && pip install -r requirements.txt
 
 # Define a second stage for the runtime, using the same Debian Bookworm slim image
-FROM python:3.12-slim-bookworm as final
+FROM python:3.12-slim-bookworm AS final
 
-# Upgrade libc-bin in the final stage to ensure security patch is applied
-RUN apt-get update && apt-get install -y libc-bin=2.36-9+deb12u7 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Upgrade libc-bin in the final stage (no pinned version to avoid downgrade error)
+RUN apt-get update \
+ && apt-get install -y --only-upgrade libc-bin \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
 
 # Copy the virtual environment from the base stage
 COPY --from=base /.venv /.venv
@@ -55,8 +55,10 @@ USER myuser
 # Copy application code with appropriate ownership
 COPY --chown=myuser:myuser . .
 
-# Inform Docker that the container listens on the specified port at runtime.
+# Inform Docker that the container listens on the specified port at runtime
 EXPOSE 8000
 
-# Use ENTRYPOINT to specify the executable when the container starts.
+# Use ENTRYPOINT to specify the executable when the container starts
 ENTRYPOINT ["uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+
+
