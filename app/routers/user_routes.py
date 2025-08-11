@@ -199,7 +199,22 @@ async def register(user_data: UserCreate, session: AsyncSession = Depends(get_db
         return user
     raise HTTPException(status_code=400, detail="Email already exists")
 
-@router.post("/login/", response_model=TokenResponse, tags=["Login and Registration"])
+@router.post("/login/", response_model=TokenResponse, tags=["Login and Registration"],openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/x-www-form-urlencoded": {
+                    "schema": {
+                        "properties": {
+                            "username": {"type": "string", "example": "john.doe@example.com"},
+                            "password": {"type": "string", "example": "Secure*1234"}
+                        },
+                        "required": ["username", "password"]
+                    }
+                }
+            }
+        }
+    }
+)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_db)):
     if await UserService.is_account_locked(session, form_data.username):
         raise HTTPException(status_code=400, detail="Account locked due to too many failed login attempts.")
