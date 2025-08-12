@@ -36,6 +36,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     email: EmailStr = Field(..., example="john.doe@example.com")
     password: constr(min_length=8, max_length=128, strip_whitespace=True) = Field(..., example="Secure*1234")
+    role: Optional[UserRole] = None
 
 class UserUpdate(UserBase):
     email: Optional[EmailStr] = Field(None, example="john.doe@example.com")
