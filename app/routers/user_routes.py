@@ -19,9 +19,12 @@ Key Highlights:
 """
 
 from builtins import dict, int, len, str
-from datetime import timedelta
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
+from typing import List, Optional
+from datetime import timedelta, datetime
+from sqlalchemy import select, and_
+from app.models.user_model import User, UserRole
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Request, Query
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db, get_email_service, require_role
@@ -33,9 +36,53 @@ from app.services.jwt_service import create_access_token
 from app.utils.link_generation import create_user_links, generate_pagination_links
 from app.dependencies import get_settings
 from app.services.email_service import EmailService
+
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 settings = get_settings()
+
+@router.get("/users/search", response_model=List[UserResponse], tags=["User Management Requires (Admin or Manager Roles)"])
+async def search_users(
+    nickname: Optional[str] = Query(None, description="Search by username (nickname)"),
+    email: Optional[str] = Query(None, description="Search by email"),
+    role: Optional[UserRole] = Query(None, description="Filter by role"),
+    is_locked: Optional[bool] = Query(None, description="Filter by locked status"),
+    email_verified: Optional[bool] = Query(None, description="Filter by email verification status"),
+    created_from: Optional[datetime] = Query(None, description="Registration date"),
+    created_to: Optional[datetime] = Query(None, description="Registration date"),
+    skip: int = 0,
+    limit: int = 25,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_role(["ADMIN", "MANAGER"]))
+):
+    conditions = []
+    if nickname:
+        conditions.append(User.nickname.ilike(f"%{nickname}%"))
+    if email:
+        conditions.append(User.email.ilike(f"%{email}%"))
+    if role:
+        conditions.append(User.role == role)
+    if is_locked is not None:
+        conditions.append(User.is_locked == is_locked)
+    if email_verified is not None:
+        conditions.append(User.email_verified == email_verified)
+    if created_from:
+        conditions.append(User.created_at >= created_from)
+    if created_to:
+        conditions.append(User.created_at <= created_to)
+
+    stmt = select(User)
+    if conditions:
+        stmt = stmt.where(and_(*conditions))
+    stmt = stmt.offset(skip).limit(limit)
+
+    result = await db.execute(stmt)
+    users = result.scalars().all()
+
+    # return full objects consistently (includes created_at/updated_at, etc.)
+    return [UserResponse.model_validate(u) for u in users]
+
+
 @router.get("/users/{user_id}", response_model=UserResponse, name="get_user", tags=["User Management Requires (Admin or Manager Roles)"])
 async def get_user(user_id: UUID, request: Request, db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme), current_user: dict = Depends(require_role(["ADMIN", "MANAGER"]))):
     """
@@ -70,6 +117,8 @@ async def get_user(user_id: UUID, request: Request, db: AsyncSession = Depends(g
         updated_at=user.updated_at,
         links=create_user_links(user.id, request)  
     )
+
+
 
 # Additional endpoints for update, delete, create, and list users follow a similar pattern, using
 # asynchronous database operations, handling security with OAuth2PasswordBearer, and enhancing response
